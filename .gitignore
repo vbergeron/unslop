@@ -1,0 +1,21 @@
+/target
+
+# Everything below is derived from ASD-STE100, which this repository does not
+# carry. ASD gives the standard free of charge but forbids reproduction without
+# written authority, and its usage grant depends on who you are, so nothing
+# extracted from it is committed here. See the Getting the standard section of
+# README.md, then run the scripts in scripts/.
+
+# the standard itself
+/ASD-STE100_ISSUE9.pdf
+
+# scripts/extract_rules.py
+/ASD-STE100-53-rules.md
+
+# scripts/extract_dictionary.py
+/dictionary/*
+!/dictionary/README.md
+
+# python bytecode from the scripts
+__pycache__/
+*.pyc

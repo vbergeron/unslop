@@ -1,0 +1,75 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to make a release for
+        required: true
+
+# No binaries are attached, on purpose.
+#
+# The binary embeds the lexicon extracted from ASD-STE100. ASD gives the
+# standard free of charge but forbids reproduction without written authority,
+# and its "special usage rights" grant covers only the organizations listed in
+# the PDF front matter, so publishing a binary here would redistribute ASD's
+# content to everyone. Shipping it obfuscated inside an executable does not
+# change that.
+#
+# What this workflow does instead is mark the tag with a release that says how
+# to rebuild it. Anyone entitled to a copy of the standard can produce the same
+# binary in three commands.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: mark the tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: tag
+        run: echo "tag=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Write the release notes
+        run: |
+          tag='${{ steps.tag.outputs.tag }}'
+          {
+            echo "## Building $tag"
+            echo
+            echo "No binary is attached: it would embed the lexicon extracted"
+            echo "from ASD-STE100, which ASD gives free of charge but does not"
+            echo "permit us to redistribute. If you are entitled to a copy of"
+            echo "the standard, three commands rebuild this release:"
+            echo
+            echo '```'
+            echo "git checkout $tag"
+            echo "# save your copy of Issue 9 as ASD-STE100_ISSUE9.pdf, from"
+            echo "# https://www.asd-ste100.org/STE_downloads.html"
+            echo "python3 scripts/extract_dictionary.py"
+            echo "cargo build --release --locked"
+            echo '```'
+            echo
+            echo "The result is a single binary with no runtime to install."
+            echo "See the Getting the standard section of README.md."
+            echo
+            echo "## Changes"
+          } > notes.md
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          tag='${{ steps.tag.outputs.tag }}'
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes-file notes.md
+          else
+            gh release create "$tag" --title "$tag" \
+              --notes-file notes.md --generate-notes --verify-tag
+          fi

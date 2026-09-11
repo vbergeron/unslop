@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# What CI can check here is limited by design. This repository carries neither
+# ASD-STE100 nor anything extracted from it, and src/engine.rs pulls the
+# extracted lexicon in with include_str!, so nothing that compiles can run
+# without a copy of the standard. That rules out the test suites: they run
+# locally, for whoever holds a copy. See test/run.sh.
+#
+# cargo fmt only parses, so it always runs. clippy and the build compile, so
+# they run only where a copy is reachable: set the STE100_PDF_URL secret to
+# somewhere your organization may fetch its own copy from. Without it they are
+# skipped rather than faked.
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  check:
+    name: fmt, clippy and build
+    runs-on: ubuntu-latest
+    env:
+      STANDARD_URL: ${{ secrets.STE100_PDF_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - run: cargo fmt --all --check
+
+      - name: Skipping clippy and the build
+        if: env.STANDARD_URL == ''
+        run: |
+          echo "STE100_PDF_URL is not set, so there is no lexicon to compile" \
+               "against: clippy and the build are skipped." >&2
+          echo "See the Continuous integration section of README.md." >&2
+
+      - uses: Swatinem/rust-cache@v2
+        if: env.STANDARD_URL != ''
+
+      - name: Fetch the standard and extract the lexicon
+        if: env.STANDARD_URL != ''
+        # The lexicon is never uploaded as an artifact: it is derived from a
+        # copyrighted document, so it stays inside the run that made it.
+        run: |
+          set -eu
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y poppler-utils
+          curl -fSL --no-progress-meter --connect-timeout 20 \
+            --speed-limit 1024 --speed-time 30 \
+            -o ASD-STE100_ISSUE9.pdf "$STANDARD_URL"
+          pages=$(pdfinfo ASD-STE100_ISSUE9.pdf | awk '/^Pages:/ {print $2}')
+          test "$pages" = 434 || { echo "expected 434 pages, got $pages" >&2; exit 1; }
+          python3 scripts/extract_dictionary.py
+
+      - name: Clippy
+        if: env.STANDARD_URL != ''
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Build
+        if: env.STANDARD_URL != ''
+        run: cargo build --release --locked

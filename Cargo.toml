@@ -1,0 +1,30 @@
+[package]
+name = "unslop"
+version = "0.1.0"
+edition = "2021"
+description = "A mechanical ASD-STE100 gate for documentation"
+license = "MIT"
+
+[[bin]]
+name = "unslop"
+path = "src/main.rs"
+
+[dependencies]
+# The engine is embedded rather than shelled out to, so the whole thing -- the
+# tokenizer, the grammar, the rules and the 14,634-fact dictionary -- ships as
+# one binary with no runtime to install.
+# default-features = false matters for the whole point of embedding it. The
+# defaults are ffi, repl, hostname, tls, http and crypto-full: a REPL with
+# crossterm and rustyline, an async HTTP stack with warp, reqwest and tokio,
+# native-tls, and libffi. With them the binary links libssl, libcrypto and
+# libffi, which is exactly the runtime dependency a single self-contained
+# binary is meant to avoid. The engine parses text and needs none of it.
+scryer-prolog = { version = "0.10", default-features = false }
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+# Thin LTO, not fat: fat LTO with codegen-units = 1 took over four minutes for
+# a binary this size, which is too slow to sit in front of a commit. Thin gives
+# most of the win with parallel codegen.
+lto = "thin"
+strip = true

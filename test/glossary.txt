@@ -1,0 +1,9 @@
+# Project technical nouns and verbs (rule 1.8).
+# One per line; a line starting with # is a comment.
+upload
+timeout
+config
+credentials
+network
+flag
+retries
