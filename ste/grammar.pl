@@ -70,24 +70,32 @@ modifier_form(W) :- ends_with(W, en), !.
 items(Tokens, Items) :- items_(Tokens, 1, Items).
 
 items_([], _, []).
-items_([t(w, W, _)|Ts], I, [i(I, Low)|Is]) :-
-    !, lower(W, Low), I1 is I + 1, items_(Ts, I1, Is).
-items_([t(p, ',', _)|Ts], I, [i(I, ',')|Is]) :-
+items_([t(w, W, _)|Ts], I, [i(I, Low, Cs)|Is]) :-
+    !, lower(W, Low), candidates(Low, Cs), I1 is I + 1, items_(Ts, I1, Is).
+items_([t(p, ',', _)|Ts], I, [i(I, ',', [])|Is]) :-
     !, I1 is I + 1, items_(Ts, I1, Is).
-items_([t(c, _, _)|Ts], I, [i(I, code_span)|Is]) :-
+items_([t(c, _, _)|Ts], I, [i(I, code_span, [])|Is]) :-
     !, I1 is I + 1, items_(Ts, I1, Is).
-items_([t(n, _, _)|Ts], I, [i(I, numeral)|Is]) :-
+items_([t(n, _, _)|Ts], I, [i(I, numeral, [])|Is]) :-
     !, I1 is I + 1, items_(Ts, I1, Is).
 items_([_|Ts], I, Is) :- items_(Ts, I, Is).
+
+% The readings a word can have, computed once for each position.
+%
+% tw//2 used to call cand/2 from inside the parse. A candidate set does not
+% change during a parse, so that re-derived the same answer about 22 times for
+% each token, and made ste_form/3 the most called predicate in the program, at
+% 63 calls for each token.
+candidates(Word, Cands) :- findall(POS, cand(Word, POS), Raw), sort(Raw, Cands).
 
 % index_token(+Sentence, +Index, -Token) to get a position back for a report
 index_token(Tokens, Index, Token) :-
     items(Tokens, Items),
-    nth_item(Items, Index, i(Index, _)),
+    nth_item(Items, Index, i(Index, _, _)),
     word_tokens_only(Tokens, Ws),
     nth1_(Index, Ws, Token).
 
-nth_item(Items, Index, Item) :- memberchk(Item, Items), Item = i(Index, _).
+nth_item(Items, Index, Item) :- memberchk(Item, Items), Item = i(Index, _, _).
 
 word_tokens_only([], []).
 word_tokens_only([T|Ts], [T|Ws]) :-
@@ -107,24 +115,24 @@ nth1_(N, [_|Xs], X) :- N > 1, N1 is N - 1, nth1_(N1, Xs, X).
 % parses both as one verb and as a verb plus an adjective, and the two readings
 % disagree, so unanimity throws away a word the lexicon knew all along.
 tw(POS, [I1-POS, I2-POS]) -->
-    [i(I1, W1), i(I2, W2)],
+    [i(I1, W1, _), i(I2, W2, _)],
     { ste_tokens([W1, W2], _, POS) },
     !.
 tw(POS, [I-POS]) -->
-    [i(I, W)],
-    { cand(W, POS) }.
+    [i(I, _, Cands)],
+    { member(POS, Cands) }.
 
-comma --> [i(_, ',')].
+comma --> [i(_, ',', _)].
 
 % numerals and code spans stand in for a noun phrase
-opaque([]) --> [i(_, numeral)].
-opaque([]) --> [i(_, code_span)].
+opaque([]) --> [i(_, numeral, _)].
+opaque([]) --> [i(_, code_span, _)].
 
 % "No. 105" is an identifier and not two words to resolve. The period is not an
 % item, so the pair arrives as `no` and a numeral. Without this production
 % "SERVICE BULLETIN No. 105 CHANGES THE BOLTS ..." had no parse in which
 % SERVICE is a noun, and the only parse left made it the verb.
-opaque([]) --> [i(_, no), i(_, numeral)].
+opaque([]) --> [i(_, no, _), i(_, numeral, _)].
 
 % ---- clauses -------------------------------------------------------------
 
@@ -138,7 +146,7 @@ sent_tail([]) --> [].
 sent_tail(As) --> coord(A1), clause_(A2), { append(A1, A2, As) }.
 sent_tail(As) --> comma, coord(A1), clause_(A2), { append(A1, A2, As) }.
 
-coord([I-conj]) --> [i(I, W)], { memberchk(W, [and, or, but, then]) }.
+coord([I-conj]) --> [i(I, W, _)], { memberchk(W, [and, or, but, then]) }.
 
 % Rule 5.4: a condition comes first and a comma divides it from the command.
 clause_(As) --> condition(A1), comma, clause_(A2), { append(A1, A2, As) }.
@@ -183,7 +191,7 @@ verb_core(As) --> modal(A1), adverbs(A2), tw(v, A3),
                   { append(A1, A2, AB), append(AB, A3, As) }.
 verb_core(As) --> tw(v, As).
 
-modal(As) --> [i(I, W)], { memberchk(W, [must, can, will, do, does, did]), As = [I-v] }.
+modal(As) --> [i(I, W, _)], { memberchk(W, [must, can, will, do, does, did]), As = [I-v] }.
 
 adverbs([]) --> [].
 adverbs(As) --> tw(adv, A1), adverbs(A2), { append(A1, A2, As) }.
@@ -216,17 +224,17 @@ modifier(As) --> tw(conj, A1), np(A2), { append(A1, A2, As) }.     % "and the pu
 % FOLLOWS is a form of FOLLOW, which rule 1.2 replaces with OBEY. Listing the
 % phrase adds a competing parse, and unanimity then declines to convict --
 % which is the mechanism doing its job rather than an exception to it.
-idiom([I1-prep, I2-adv]) --> [i(I1, as), i(I2, follows)].
-idiom([I1-adv, I2-adv])  --> [i(I1, at), i(I2, first)].
+idiom([I1-prep, I2-adv]) --> [i(I1, as, _), i(I2, follows, _)].
+idiom([I1-adv, I2-adv])  --> [i(I1, at, _), i(I2, first, _)].
 
 % "AS SHOWN IN FIGURE 4", "AS REQUIRED", "AS SPECIFIED": a reduced clause in
 % which AS is the preposition, which is the reading the standard approves. With
 % no noun phrase after it, the only other parse makes AS a conjunction, and
 % "as (conj)" is not approved -- so the sentence convicted itself.
-idiom([I1-prep, I2-adj]) --> [i(I1, as), i(I2, W)], { participle(W) }.
+idiom([I1-prep, I2-adj]) --> [i(I1, as, _), i(I2, W, _)], { participle(W) }.
 
 to_infinitive(As) -->
-    [i(I, to)], verb_group(A1), predicate(A2),
+    [i(I, to, _)], verb_group(A1), predicate(A2),
     { append([I-prep|A1], A2, As) }.
 
 pp(As) --> tw(prep, A1), np(A2), { append(A1, A2, As) }.
@@ -242,9 +250,9 @@ np(As) --> np_core(As).
 
 np_core(As) --> determiner(A1), nominal(A2, _), { append(A1, A2, As) }.
 np_core(As) --> nominal(As, _).
-np_core([I-pron]) --> [i(I, W)], { bare_pronoun(W) }.
+np_core([I-pron]) --> [i(I, W, _)], { bare_pronoun(W) }.
 % "EACH OF THE BOLTS": a quantifier stands for a noun phrase only with "of".
-np_core(As) --> [i(I, W)], { quantifier(W) }, pp(A2), { As = [I-pron|A2] }.
+np_core(As) --> [i(I, W, _)], { quantifier(W) }, pp(A2), { As = [I-pron|A2] }.
 
 bare_pronoun(W) :- memberchk(W, [you, it, they, them, we, us, he, she, him,
                                  her, i, me, who, which, this, these, that,
@@ -258,7 +266,7 @@ quantifier(W) :- memberchk(W, [each, both, all, some, any, one, none, either,
 %    position unresolvable.
 
 determiner(As) --> tw(art, As).
-determiner(As) --> [i(I, W)], { memberchk(W, [this, these, its, their, your,
+determiner(As) --> [i(I, W, _)], { memberchk(W, [this, these, its, their, your,
                                               our, his, her, my, each, all,
                                               any, no, some, both, one, every,
                                               other, another]),
