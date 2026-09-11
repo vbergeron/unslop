@@ -356,3 +356,22 @@ ASD-STE100 is copyright and an EU trademark of ASD, Brussels (EU Trade Mark
 No. 017966390). The code in `ste/`, `src/` and `scripts/` is ours. The output of
 those scripts is ASD's. `.gitignore` excludes it, and releases carry
 instructions instead.
+
+## Licence
+
+The source in this repository is under either [MIT](LICENSE-MIT) or
+[Apache-2.0](LICENSE-APACHE), at your option. Both are the standard texts,
+unmodified.
+
+The grant reaches the source and stops there. It does not reach ASD-STE100, the
+lexicon or rule text a script extracts from it, or a binary built from them: the
+binary embeds the lexicon, which is why no release carries one. Neither licence
+grants any right in the trade marks "ASD-STE100" and "Simplified Technical
+English" — Apache-2.0 excludes them at section 6, and MIT says nothing, which
+is not a grant.
+
+The dependencies impose nothing further. All 303 crates in the build graph are
+permissive: Scryer is BSD-3-Clause, and four MPL-2.0 crates arrive under
+`scraper`. MPL-2.0 is per-file copyleft that leaves this code alone and asks
+only that the source of those files reach whoever gets a binary, which no one
+does.

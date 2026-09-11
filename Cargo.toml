@@ -3,7 +3,7 @@ name = "unslop"
 version = "0.1.0"
 edition = "2021"
 description = "A mechanical ASD-STE100 gate for documentation"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 [[bin]]
 name = "unslop"
