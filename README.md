@@ -118,7 +118,13 @@ word only when every parse agrees. `ste/README.md` covers the grammar.
 **Structure: parsed, not guessed.** Block kind decides which rules apply and
 which sentence limit holds, so `ste/markdown.pl` implements the block level of
 [GitHub Flavored Markdown 0.29-gfm](https://github.github.com/gfm/), a strict
-superset of CommonMark. Every way a line-by-line guess can be wrong used to
+superset of CommonMark. Only a file that claims to be markdown gets it: `.md`
+and `.markdown` are parsed as markdown, and everything else — `.txt`, no
+extension at all, standard input — goes through `ste/text.pl`, where a blank
+line divides paragraphs and nothing else is structure. Reading `#` as a heading
+in a file that never said it was markdown drops that line's words from the
+check, and dropping words is how a gate goes quiet. `--syntax md|text`
+overrides the choice. Every way a line-by-line guess can be wrong used to
 appear as a diagnostic: a bulleted list read as a paragraph of seven sentences,
 a step wrapped at a column that lost its second line and its word count, a
 tilde fence checked as prose. `test/markdown_test.pl` holds the block stream

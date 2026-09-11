@@ -97,6 +97,7 @@ that same file, thus the two manuals keep one word for each concept.
 | `--quiet` | Shows only the count at the end |
 | `--format json` | Gives one JSON object for each report |
 | `--max-errors N` | Stops after N errors in a file |
+| `--syntax auto\|md\|text` | Selects how to read the structure |
 
 `--max-errors` counts errors and not reports of all types. If it stops the walk, the count
 line also shows `stopped early`. Thus you cannot read a short count as a
@@ -125,6 +126,39 @@ If the guess is not correct, write a marker before the block:
 ```
 <!-- ste: procedural -->
 ```
+
+## How unslop reads the structure
+
+The name of the file selects the rules. A file with the name `.md` or
+`.markdown` gets the markdown structure of the table above. Each other file is
+plain text.
+
+Plain text has no structure to read. Each line is text, thus `#` is not a
+heading, and `unslop` examines the lines of a fenced code block. An empty line
+divides one paragraph from the next, and nothing else divides the document.
+
+Standard input and `-c` have no file name, thus they are plain text. To read
+them as markdown, use the `--syntax` option:
+
+```
+cat docs/guide.md | unslop --syntax md
+```
+
+The option also gives the other result. It reads a markdown file as plain
+text:
+
+```
+unslop --syntax text docs/guide.md
+```
+
+| What you give | How unslop reads it |
+| --- | --- |
+| `docs/guide.md` | Markdown |
+| `notes.txt` | Plain text |
+| `README` | Plain text |
+| Standard input or `-c` | Plain text |
+| `--syntax md` | Markdown |
+| `--syntax text` | Plain text |
 
 ## Use unslop as a gate
 

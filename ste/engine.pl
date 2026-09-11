@@ -8,8 +8,8 @@
 % consults it from a string and has no filesystem to resolve them against.
 % The load order is the host's responsibility:
 %
-%   markdown.pl  tokenize.pl  ../dictionary/ste_dictionary.pl  lexicon.pl
-%   grammar.pl  rules.pl  engine.pl
+%   markdown.pl  text.pl  tokenize.pl  ../dictionary/ste_dictionary.pl
+%   lexicon.pl  grammar.pl  rules.pl  engine.pl
 %
 % ste/load.pl does exactly that for SWI, for development and for the tests.
 %
@@ -19,15 +19,27 @@
 %                             project's technical nouns and verbs (rule 1.8).
 %
 %   check(+Codes, -Answer)    the pure entry: Codes is a list of character
-%                             codes. Used by the tests.
+%                             codes, read as plain text. Used by the tests.
+%
+%   check(+Codes, +Syntax, -Answer)
+%                             the same, told how to divide the document.
+%                             Syntax is `markdown` or `text`; anything else is
+%                             a type_error, because a syntax the engine did
+%                             not recognise would yield no blocks, and a gate
+%                             that reports nothing is one that passes
+%                             everything.
 %
 %   check_file(+Path, -Answer) reads the file itself, through ISO open/3 and
 %                             get_code/2. This is the entry a host uses: a
 %                             query is a string, so putting a whole document
 %                             through one means encoding it as a list of
-%                             integers, and a path costs nothing.
+%                             integers, and a path costs nothing. The syntax
+%                             comes from the extension, see path_syntax/2.
 %
-% Both are nondeterministic and yield, in document order:
+%   check_file(+Path, +Syntax, -Answer)
+%                             the same, overriding what the extension says.
+%
+% Every entry is nondeterministic and yields, in document order:
 %   diag(Diagnostic)   one solution per finding
 %   done(ok)           ALWAYS the last solution
 %
@@ -63,19 +75,53 @@
 % Exceptions are deliberately not caught, so the host sees them.
 
 check_file(Path, Answer) :-
-    read_file_codes(Path, Codes),
-    check(Codes, Answer).
+    path_syntax(Path, Syntax),
+    check_file(Path, Syntax, Answer).
 
-check(Codes, Answer) :-
-    (   unit_diag(Codes, D),
+check_file(Path, Syntax, Answer) :-
+    read_file_codes(Path, Codes),
+    check(Codes, Syntax, Answer).
+
+% ---- the syntax of a document --------------------------------------------
+%
+% Only a markdown extension gets the markdown block grammar. Everything else
+% is plain text, .txt included, and so is a document with no extension at all:
+% reading `#` as a heading in a file that never claimed to be markdown drops
+% the line's words from the check, and dropping words is how a gate goes quiet.
+% The host can always say which it is; this is what happens when nobody does.
+path_syntax(Path, markdown) :- markdown_extension(Path), !.
+path_syntax(_, text).
+
+markdown_extension(Path) :-
+    lower(Path, P),
+    (   ends_with(P, '.md')
+    ;   ends_with(P, '.markdown')
+    ),
+    !.
+
+syntax(markdown).
+syntax(text).
+
+% block_of(+Syntax, +Lines, -Block) is the whole of what the syntax decides.
+block_of(markdown, Lines, Block) :- md_block(Lines, Block).
+block_of(text, Lines, Block) :- text_block(Lines, Block).
+
+check(Codes, Answer) :- check(Codes, text, Answer).
+
+check(Codes, Syntax, Answer) :-
+    (   syntax(Syntax)
+    ->  true
+    ;   throw(error(type_error(ste_syntax, Syntax), check/3))
+    ),
+    (   unit_diag(Codes, Syntax, D),
         Answer = diag(D)
     ;   Answer = done(ok)
     ).
 
 % A unit is a block, for the rules that count sentences, then each sentence.
-unit_diag(Codes, D) :-
+unit_diag(Codes, Syntax, D) :-
     split_lines(Codes, Lines),
-    md_block(Lines, Block),
+    block_of(Syntax, Lines, Block),
     Block = block(Kind, _, _),
     checked_kind(Kind),
     block_tokens(Block, Tokens),

@@ -25,12 +25,18 @@ t(Label, Goal) :-
 
 finish :- ( failure -> halt(1) ; halt(0) ).
 
+% The corpus figures are pinned to `markdown`, the syntax they were measured
+% under. A bare sentence is one paragraph either way, except where it opens
+% with something markdown reads as structure -- "1. REMOVE THE BOLT" is a step
+% and not a paragraph -- so leaving the syntax to the default would move the
+% numbers for a reason that has nothing to do with the engine.
 errors_of(Codes, Errors) :-
-    findall(D, ( check(Codes, diag(D)), D = diag(_, error, _, _, _) ), Errors).
+    findall(D, ( check(Codes, markdown, diag(D)), D = diag(_, error, _, _, _) ), Errors).
 
+% Through check_file/2, so the extension decides: these are .md files, and the
+% path is the one a host takes.
 file_errors(File, Errors) :-
-    read_file_codes(File, Codes),
-    errors_of(Codes, Errors).
+    findall(D, ( check_file(File, diag(D)), D = diag(_, error, _, _, _) ), Errors).
 
 % ---- the sensitivity floor ----------------------------------------------
 %
@@ -87,7 +93,44 @@ engine_main :-
       finds('Remove the horizontal cylinder pivot bearing housing.',
             multi_word_noun(5, 3, _))),
     t('every finding emitted is one the host knows', findings_known),
+    t('a .txt file gets no markdown grammar',
+      file_error_count('test/plain.txt', 3)),
+    t('the same file as markdown hides the fenced block',
+      syntax_error_count('test/plain.txt', markdown, 2)),
+    t('.md and .markdown ask for the markdown grammar', markdown_extensions),
+    t('.txt, an unknown extension and none are plain text', text_extensions),
+    t('an unknown syntax throws instead of passing the document',
+      unknown_syntax_throws),
     finish.
+
+% ---- the syntax of a document -------------------------------------------
+%
+% test/plain.txt holds a heading marker, a paragraph and a fenced block, all
+% three the same sentence. As plain text none of that is markup, so all three
+% are prose and all three are reported. As markdown the fence hides one of
+% them, which is the difference the two counts pin down.
+
+syntax_error_count(File, Syntax, N) :-
+    findall(D, ( check_file(File, Syntax, diag(D)),
+                 D = diag(_, error, _, _, _) ), Es),
+    length(Es, N).
+
+markdown_extensions :-
+    forall(member(P, ['a.md', 'a.MD', 'a.Markdown', 'doc/a.markdown']),
+           path_syntax(P, markdown)).
+
+% 'a.md.bak' and 'dir.md/a' are the cases a contains-check would get wrong:
+% the extension is the end of the path, not a substring of it.
+text_extensions :-
+    forall(member(P, ['a.txt', 'a.TXT', 'a.rst', 'README',
+                      'a.md.bak', 'dir.md/a', '.md']),
+           path_syntax(P, text)).
+
+unknown_syntax_throws :-
+    atom_codes('Open the door.', Cs),
+    catch(( check(Cs, bogus, _), fail ),
+          error(type_error(ste_syntax, bogus), _),
+          true).
 
 corpus(Texts) :- setof(T, W^P^ste_example(W, P, ste, T), Texts).
 
@@ -113,7 +156,7 @@ fires(File, Rules) :-
 
 finds(Text, Finding) :-
     atom_codes(Text, Cs),
-    check(Cs, diag(diag(_, _, _, Finding, _))), !.
+    check(Cs, markdown, diag(diag(_, _, _, Finding, _))), !.
 
 % The host matches on the Finding functor, so a new one must be added on both
 % sides. This asserts that nothing is emitted which is not on the list; the
@@ -121,8 +164,7 @@ finds(Text, Finding) :-
 % know rather than dropping the diagnostic.
 findings_known :-
     forall(( member(F, ['test/sample.md', 'test/expected.md']),
-             read_file_codes(F, Cs),
-             check(Cs, diag(diag(_, _, _, Finding, _))) ),
+             check_file(F, diag(diag(_, _, _, Finding, _))) ),
            ( functor(Finding, Name, Arity), known_finding(Name, Arity) )).
 
 known_finding(sentence_too_long, 3).

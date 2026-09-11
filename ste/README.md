@@ -7,12 +7,19 @@ the host owns the CLI and the wording. The host is
 ## Interface
 
 ```prolog
-set_glossary(+Words)        % once, at startup: a list of atoms
-check(+Codes, -Answer)      % the pure entry, used by the tests
-check_file(+Path, -Answer)  % reads the file itself, through ISO open/3
+set_glossary(+Words)                % once, at startup: a list of atoms
+check(+Codes, -Answer)              % the pure entry, used by the tests
+check(+Codes, +Syntax, -Answer)     % ... told how to divide the document
+check_file(+Path, -Answer)          % reads the file itself, through ISO open/3
+check_file(+Path, +Syntax, -Answer) % ... overriding what the extension says
 ```
 
-Both entries are nondeterministic and yield, in document order:
+`Syntax` is `markdown` or `text`. Anything else is a `type_error`: a syntax the
+engine did not recognise would yield no blocks, and a gate that reports nothing
+is one that passes everything. `check/2` is `text`, and `check_file/2` reads the
+syntax off the extension — only `.md` and `.markdown` are markdown.
+
+Every entry is nondeterministic and yields, in document order:
 
 ```prolog
 diag(diag(Rule, Severity, span(Line, Byte, Len), Finding, Suggestions))
@@ -45,11 +52,12 @@ a clean token list, and source positions ride on every token.
 | File | Role |
 | --- | --- |
 | `markdown.pl` | Lines to blocks, to GitHub Flavored Markdown 0.29-gfm. |
+| `text.pl` | Lines to blocks for a file with no markup. Blank lines divide paragraphs and nothing else is structure. |
 | `tokenize.pl` | Characters to tokens to sentences, plus the section 8 word counter. |
 | `lexicon.pl` | Lookup over `../dictionary/ste_dictionary.pl`, and the verb classes the rules need. |
 | `grammar.pl` | The DCG that resolves a part of speech in context. |
 | `rules.pl` | The checks. Each one names the rule it enforces, and emits structured findings only. |
-| `engine.pl` | `check/2`, the generators, the per-sentence sort. Carries no load directives. |
+| `engine.pl` | `check/2` and `check/3`, the syntax of a document, the generators, the per-sentence sort. Carries no load directives. |
 | `load.pl` | The load order, for SWI and for the tests. |
 
 `engine.pl` carries no `ensure_loaded/1`. A host consults these files from
@@ -254,6 +262,12 @@ verbatim examples from a copyrighted document.
 - The grammar has no coverage for tables, lists inside sentences, or the
   `No. 105` shape of an identifier.
 - The glossary matches single words. `main landing gear` needs three entries.
+- The syntax of a document comes from its extension, and only `.md` and
+  `.markdown` get `markdown.pl`. Everything else, `.txt` included, goes through
+  `text.pl`, and so does a string handed to `check/2` with no syntax named: a
+  file that never claimed to be markdown should not have a line dropped from
+  the check because it opens with a `#`. `check/3` overrides this, and the host
+  exposes that as `--syntax`.
 - `markdown.pl` implements the block level of the spec and none of the inline
   level. Emphasis and link syntax reach the tokenizer as text, and an inline
   link still convicts its own syntax; see `../ISSUES.md`. The seven HTML block

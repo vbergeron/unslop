@@ -16,7 +16,7 @@ mod render;
 
 use clap::{Parser, ValueEnum};
 use diag::Severity;
-use engine::Engine;
+use engine::{Engine, Syntax};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -67,6 +67,32 @@ struct Cli {
     /// never parsed.
     #[arg(long, value_name = "N")]
     max_errors: Option<usize>,
+
+    /// How to read the input: auto, md or text
+    ///
+    /// `auto` takes it from the extension: .md and .markdown get the markdown
+    /// block grammar, anything else is plain text. Standard input and -c have
+    /// no extension, so they are plain text unless this says otherwise, which
+    /// is what makes markdown on a pipeline reachable at all.
+    #[arg(long, value_enum, default_value_t = SyntaxArg::Auto)]
+    syntax: SyntaxArg,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
+enum SyntaxArg {
+    Auto,
+    Md,
+    Text,
+}
+
+impl From<SyntaxArg> for Syntax {
+    fn from(a: SyntaxArg) -> Self {
+        match a {
+            SyntaxArg::Auto => Syntax::Auto,
+            SyntaxArg::Md => Syntax::Markdown,
+            SyntaxArg::Text => Syntax::Text,
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
@@ -107,8 +133,10 @@ fn main() -> ExitCode {
         let found = match input {
             // A path goes to the engine as a path: it reads the file through
             // ISO open/3, which keeps a whole document out of the query.
-            Input::File(p) => engine.check_file(p, cli.max_errors),
-            Input::Inline { text, .. } => engine.check_text(text, cli.max_errors),
+            Input::File(p) => engine.check_file(p, cli.max_errors, cli.syntax.into()),
+            Input::Inline { text, .. } => {
+                engine.check_text(text, cli.max_errors, cli.syntax.into())
+            }
         };
         let found = match found {
             Ok((d, cut)) => {

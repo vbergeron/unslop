@@ -29,9 +29,11 @@ glossary_words([insert, main]).
 compliant(Ts)     :- setof(T, W^P^ste_example(W, P, ste, T), Ts).
 non_compliant(Ts) :- setof(T, W^P^ste_example(W, P, non_ste, T), Ts).
 
+% Pinned to `markdown`, the syntax these figures were measured under. See the
+% note on errors_of/2 in engine_test.pl.
 diags_of(Text, Ds) :-
     atom_codes(Text, Cs),
-    findall(D, check(Cs, diag(D)), Ds).
+    findall(D, check(Cs, markdown, diag(D)), Ds).
 
 errors_of(Text, Es) :-
     diags_of(Text, Ds),
@@ -171,10 +173,11 @@ throughput :-
     DT is T1 - T0,
     format("  ~w corpus sentences~t~27|~w ms~n", [N, DT]).
 
+% check_file/2 rather than check/2: the file is USAGE.md, so the extension asks
+% for the markdown grammar, which is the work the figure is meant to time.
 timed_file(File) :-
-    read_file_codes(File, Cs),
     statistics(walltime, [T0|_]),
-    findall(1, check(Cs, _), _),
+    findall(1, check_file(File, _), _),
     statistics(walltime, [T1|_]),
     DT is T1 - T0,
     format("  ~w~t~27|~w ms~n", [File, DT]).

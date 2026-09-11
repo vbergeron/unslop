@@ -11,9 +11,10 @@
 
 files(['test/clean.md', 'test/sample.md', 'test/expected.md']).
 
+% Through check_file/2: the files are .md, so this is both the host's entry and
+% the one that reads the syntax off the extension.
 answers(File, As) :-
-    read_file_codes(File, Codes),
-    findall(A, check(Codes, A), As).
+    findall(A, check_file(File, A), As).
 
 :- dynamic(failure/0).
 

@@ -1,0 +1,7 @@
+# Ensure the cover is closed
+
+Ensure the cover is closed.
+
+```
+Ensure the cover is closed.
+```

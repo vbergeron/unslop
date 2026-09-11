@@ -6,6 +6,7 @@
 % host and the tests cannot drift apart.
 
 :- ensure_loaded('markdown.pl').
+:- ensure_loaded('text.pl').
 :- ensure_loaded('tokenize.pl').
 :- ensure_loaded('../dictionary/ste_dictionary.pl').
 :- ensure_loaded('lexicon.pl').

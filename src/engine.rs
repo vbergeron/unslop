@@ -3,9 +3,10 @@
 //! The Prolog sources are compiled into the binary with `include_str!`, in the
 //! order `ste/load.pl` documents. `markdown.pl` comes first: it owns the block
 //! structure, to GitHub Flavored Markdown 0.29-gfm, and the tokenizer consumes
-//! the content lines it produces. They cannot carry load directives of their
-//! own: a consulted string has no filesystem to resolve them against, so the
-//! order lives here and in `ste/load.pl`, which the Prolog tests use.
+//! the content lines it produces. `text.pl` is its counterpart for a file with
+//! no markup, and yields the same blocks. They cannot carry load directives of
+//! their own: a consulted string has no filesystem to resolve them against, so
+//! the order lives here and in `ste/load.pl`, which the Prolog tests use.
 //!
 //! The engine yields one answer at a time and `done(ok)` last. Running out of
 //! answers without that terminator means the engine is broken, which is not
@@ -36,6 +37,7 @@ const PRELUDE: &str = "\
 
 const SOURCES: &[&str] = &[
     include_str!("../ste/markdown.pl"),
+    include_str!("../ste/text.pl"),
     include_str!("../ste/tokenize.pl"),
     include_str!("../dictionary/ste_dictionary.pl"),
     include_str!("../ste/lexicon.pl"),
@@ -43,6 +45,31 @@ const SOURCES: &[&str] = &[
     include_str!("../ste/rules.pl"),
     include_str!("../ste/engine.pl"),
 ];
+
+/// How to divide a document into blocks.
+///
+/// `Auto` is not a third syntax: it means the caller is not saying, and the
+/// engine decides from the extension. Only a markdown extension gets the
+/// markdown grammar, so a `.txt` file, or one with no extension, is prose
+/// whose every line is checked as written.
+#[derive(Copy, Clone, PartialEq, Eq, Default)]
+pub enum Syntax {
+    #[default]
+    Auto,
+    Markdown,
+    Text,
+}
+
+impl Syntax {
+    /// The engine's atom for this syntax, or `None` to let it choose.
+    fn name(self) -> Option<&'static str> {
+        match self {
+            Syntax::Auto => None,
+            Syntax::Markdown => Some("markdown"),
+            Syntax::Text => Some("text"),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum Error {
@@ -101,32 +128,43 @@ impl Engine {
     /// run stop on two warnings, report zero errors and exit 0 on a file that
     /// had six.
     ///
+    /// `syntax` says how to divide the document. `Syntax::Auto` leaves that to
+    /// the engine, which reads it off the extension.
+    ///
     /// Returns the diagnostics and whether the walk was cut short, so the
     /// caller can say so rather than present a truncated count as a total.
     pub fn check_file(
         &mut self,
         path: &Path,
         max_errors: Option<usize>,
+        syntax: Syntax,
     ) -> Result<(Vec<Diagnostic>, bool), Error> {
-        self.run(
-            format!("check_file({}, A).", quote(&path.display().to_string())),
-            max_errors,
-        )
+        let path = quote(&path.display().to_string());
+        let query = match syntax.name() {
+            // check_file/2 is the one that consults the extension.
+            None => format!("check_file({path}, A)."),
+            Some(s) => format!("check_file({path}, {s}, A)."),
+        };
+        self.run(query, max_errors)
     }
 
     /// The same, on text the caller already holds.
     ///
-    /// This goes through the engine's pure entry, `check/2`, with the text
+    /// This goes through the engine's pure entry, `check/3`, with the text
     /// encoded as a list of character codes in the query. That is why a whole
     /// document goes by path instead: a query is a string, and encoding a
     /// 100KB file this way costs some 600KB of query. A snippet is a few
     /// hundred bytes, so the same objection does not apply.
+    ///
+    /// There is no extension to read here, so `Syntax::Auto` means plain text.
     pub fn check_text(
         &mut self,
         text: &str,
         max_errors: Option<usize>,
+        syntax: Syntax,
     ) -> Result<(Vec<Diagnostic>, bool), Error> {
-        self.run(format!("check({}, A).", codes(text)), max_errors)
+        let s = syntax.name().unwrap_or("text");
+        self.run(format!("check({}, {s}, A).", codes(text)), max_errors)
     }
 
     fn run(
@@ -246,7 +284,7 @@ fn quote(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{codes, quote};
+    use super::{codes, quote, Syntax};
 
     #[test]
     fn encodes_text_as_codes() {
@@ -254,6 +292,16 @@ mod tests {
         assert_eq!(codes("Hi."), "[72,105,46]");
         // A multi-byte character is one code point, not its bytes.
         assert_eq!(codes("\u{b5}m"), "[181,109]");
+    }
+
+    /// The atoms have to match the `syntax/1` facts in `ste/engine.pl`. A typo
+    /// here reaches the engine as a type_error rather than a silent pass, but
+    /// there is no reason to find that out at runtime.
+    #[test]
+    fn syntax_names_the_engine_atom() {
+        assert_eq!(Syntax::Auto.name(), None);
+        assert_eq!(Syntax::Markdown.name(), Some("markdown"));
+        assert_eq!(Syntax::Text.name(), Some("text"));
     }
 
     #[test]
