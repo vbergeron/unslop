@@ -186,8 +186,7 @@ emit(Kind, Content, Rest, L, Byte, [t(Kind, V, pos(L, Byte, Len))|More]) :-
 % and the target's own punctuation -- most often the period of a file
 % extension, as in "[BUILD.md](BUILD.md)" -- reads as the end of a sentence.
 % The fragment that survives can force an ordinary word into the only verb
-% reading left, which is how a correct link convicts itself; see ISSUES.md,
-% Fixed, F8.
+% reading left, which is how a correct link convicts itself.
 %
 % The fix mirrors a code span: the link text is re-tokenized in place, since
 % it is prose a reader sees and rule 1.2 and the rest must keep checking it,
@@ -340,8 +339,8 @@ abbreviation_period(t(p, '.', _), [t(n, _, _)|_]).
 % A period with no space before the next token is not a sentence boundary
 % either: real prose puts a space, or nothing, after a full stop, so a period
 % glued straight onto more text is a file extension, a version number or an
-% identifier, as in "BUILD.md" or "v1.2rc1" -- the other half of ISSUES.md,
-% Fixed, F8: a filename standing as a link's own visible text is still
+% identifier, as in "BUILD.md" or "v1.2rc1" -- the other half of the link
+% fix above: a filename standing as a link's own visible text is still
 % tokenized as ordinary words, so its period needs this too. No token is ever
 % emitted for a space (see space/1 in toks/4), so two tokens with no byte gap
 % between them were never separated by one in the source; a gap of any size

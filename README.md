@@ -228,7 +228,7 @@ a conditional whose subject is two coordinated nouns, and a `No. ` identifier
 after a heading noun. Neither was intrinsic to the severity choice. Closing
 them — a coordinated subject in the grammar, and a period that a numeral
 follows no longer ending a sentence — gives three times the sensitivity at no
-cost in precision. `ISSUES.md` records both.
+cost in precision.
 
 ### Throughput
 
@@ -348,7 +348,9 @@ that writes fast fails where a writer in a hurry does.
 | `src/` | The host, in Rust. Produces the `unslop` binary |
 | `test/` | Prolog suites, `blocks.md` and `measure.pl`. They need the standard, so they run locally |
 | `examples/loadcheck.rs` | Reports what Scryer rejects while loading |
-| `ISSUES.md` | The open defects in the order worth fixing, what was rejected and why, and what the fixes measured |
+
+Open defects are tracked as [GitHub Issues](https://github.com/vbergeron/unslop/issues),
+not in this tree.
 
 ## Copyright
 
