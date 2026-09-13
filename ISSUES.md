@@ -164,7 +164,7 @@ thread 'main' panicked at ... InvalidSingleQuotedCharacter('\n')
 exit=101
 ```
 
-`quote/1` at `src/engine.rs:230` escapes `'` and `\` and nothing else, and
+`quote/1` at `src/engine.rs:308` escapes `'` and `\` and nothing else, and
 Scryer's reader rejects a raw newline inside a quoted atom. The documented
 contract is 0, 1 or 2.
 
@@ -186,7 +186,7 @@ engine time, because the algorithm is evidently not the cost.
 
 ## 10. Each file is read twice
 
-`Input::lines` at `src/main.rs:175` reads the file in Rust to convert a byte
+`Input::lines` at `src/main.rs:213` reads the file in Rust to convert a byte
 offset into a character column, and `check_file/2` reads it again in Prolog.
 Deliberate as far as it goes, since the host holds the text and the engine
 holds the parse, but the second read is only wanted for the lines a diagnostic
