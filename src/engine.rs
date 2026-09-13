@@ -79,6 +79,16 @@ pub enum Error {
     NoTerminator,
     /// A term this build does not understand.
     Unknown(String),
+    /// The embedded sources did not finish loading.
+    ///
+    /// `consult_module_string` returns nothing: Scryer gives the host no way
+    /// to learn that a directive it could not apply -- ours hit a bare
+    /// `discontiguous/1`, which the real dictionary carries -- silently
+    /// truncated the rest of the consult. `Engine::new` runs a query only a
+    /// complete load can answer and turns a failure of it into this variant,
+    /// so the diagnosis is made once, at construction, instead of showing up
+    /// later as an existence_error on whichever file is checked first.
+    Load(String),
 }
 
 impl fmt::Display for Error {
@@ -89,6 +99,12 @@ impl fmt::Display for Error {
                 f.write_str("the engine stopped without finishing; this is not a clean document")
             }
             Error::Unknown(e) => f.write_str(e),
+            Error::Load(e) => write!(
+                f,
+                "the engine did not finish loading: {e}\n\
+                 this is not a defect in the document; check dictionary/ste_dictionary.pl \
+                 and the files under ste/ for a term Scryer rejects"
+            ),
         }
     }
 }
@@ -101,23 +117,46 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(glossary: &[String]) -> Result<Self, Error> {
+        Self::from_sources(SOURCES, glossary)
+    }
+
+    /// The constructor proper, taking the sources as an argument so the
+    /// tests can substitute `test/fixtures/ste_dictionary.pl` for the real,
+    /// unlicensed one -- see that fixture's README for why.
+    fn from_sources(sources: &[&str], glossary: &[String]) -> Result<Self, Error> {
         let mut machine = MachineBuilder::default().build();
         // One consult of one program, not six. Consulting the files
         // separately left only the last one's predicates visible, so the first
         // cross-file call raised existence_error(read_file_codes/2).
         let mut program = String::from(PRELUDE);
-        for source in SOURCES {
+        for source in sources {
             program.push('\n');
             program.push_str(source);
         }
         machine.consult_module_string(MODULE, program);
         let mut engine = Engine { machine };
+        // Before anything else: consult_module_string cannot report that the
+        // load it just ran actually finished. Ask the engine to do something
+        // only engine.pl, the last file, can do, while the failure can still
+        // be attributed to the load rather than to whatever the caller checks
+        // first.
+        engine.verify_loaded()?;
         if !glossary.is_empty() {
             let words: Vec<String> = glossary.iter().map(|w| quote(w)).collect();
             // Once, at startup: the one assertz/1 stays out of the hot path.
             engine.expect_success(&format!("set_glossary([{}]).", words.join(",")))?;
         }
         Ok(engine)
+    }
+
+    /// `check/3` exists only if every one of the eight files loaded, since it
+    /// is defined in the last of them. Checking empty text costs nothing --
+    /// no block, no sentence, nothing but `done(ok)` -- and is answerable by
+    /// no other state than a complete load.
+    fn verify_loaded(&mut self) -> Result<(), Error> {
+        self.check_text("", None, Syntax::Text)
+            .map(|_| ())
+            .map_err(|e| Error::Load(e.to_string()))
     }
 
     /// Every diagnostic for one file, in document order.
@@ -284,7 +323,57 @@ fn quote(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{codes, quote, Syntax};
+    use super::{codes, quote, Engine, Error, Syntax};
+
+    /// The real files, but with the unlicensed dictionary swapped for the
+    /// synthetic fixture -- see test/fixtures/README.md.
+    fn engine_sources(dictionary: &str) -> Vec<&str> {
+        vec![
+            include_str!("../ste/markdown.pl"),
+            include_str!("../ste/text.pl"),
+            include_str!("../ste/tokenize.pl"),
+            dictionary,
+            include_str!("../ste/lexicon.pl"),
+            include_str!("../ste/grammar.pl"),
+            include_str!("../ste/rules.pl"),
+            include_str!("../ste/engine.pl"),
+        ]
+    }
+
+    const FIXTURE_DICTIONARY: &str = include_str!("../test/fixtures/ste_dictionary.pl");
+
+    #[test]
+    fn a_complete_load_builds_a_working_engine() {
+        let sources = engine_sources(FIXTURE_DICTIONARY);
+        let mut engine = Engine::from_sources(&sources, &[]).expect("must load");
+        // Not just "did not error": the engine the fixture describes actually
+        // answers a real check, `note` used as a verb, with the fixture's own
+        // wording -- proof this ran engine.pl and rules.pl, not a stub.
+        let (found, _) = engine
+            .check_text("Please note the value.", None, Syntax::Text)
+            .expect("must run");
+        assert!(
+            found.iter().any(|d| d.rule == "1.2"),
+            "expected a rule 1.2 finding on 'note' as a verb, got {found:?}"
+        );
+    }
+
+    /// The regression this exists to catch: a directive Scryer's loader
+    /// cannot apply inside `consult_module_string` -- a bare
+    /// `discontiguous/1`, which the real dictionary carries, is enough --
+    /// silently truncates the load before `ste/engine.pl` takes effect.
+    /// `Engine::new` must catch that at construction, as `Error::Load`, not
+    /// let it surface later as an existence_error on the caller's own file.
+    #[test]
+    fn a_load_scryer_cannot_finish_is_reported_at_construction() {
+        let broken = ":- discontiguous totally_unused_predicate/2.\n";
+        let sources = engine_sources(broken);
+        match Engine::from_sources(&sources, &[]) {
+            Err(Error::Load(_)) => {}
+            Err(e) => panic!("expected Error::Load, got {e:?}"),
+            Ok(_) => panic!("expected the broken load to fail construction"),
+        }
+    }
 
     #[test]
     fn encodes_text_as_codes() {
