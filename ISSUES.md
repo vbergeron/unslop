@@ -49,12 +49,13 @@ parse reads it as a declarative, and the parse that survives makes `note` the
 verb. Unanimity cannot decline what it never saw a competitor for.
 
 This is the failure mode `ste/README.md` records under Known limits. It is
-worth an entry because F3 made it an error where it was a warning, and a noun
-phrase with a relative clause and no main verb is an ordinary caption.
+worth an entry because a since-fixed defect made a resolved verb reading
+convict as an error rather than a warning, and a noun phrase with a relative
+clause and no main verb is an ordinary caption.
 
-**Fix.** Widen, as F2 did: a bare noun phrase with a modifier should parse
-without a verb, which adds the competing parse that unanimity then declines to
-convict.
+**Fix.** Widen the grammar, as before: a bare noun phrase with a modifier
+should parse without a verb, which adds the competing parse that unanimity
+then declines to convict.
 
 ## 3. An inflected forbidden verb gets the wrong rule and the wrong advice
 
@@ -75,9 +76,11 @@ warning rule 1.1: "verified" is not in the dictionary
 N = 628.
 ```
 
-Same shape as F5, and the advice again tells the writer to whitelist a word
-the standard replaces. It adds almost nothing to sensitivity once F3 is in
-place, 612 against 613, so the value is the rule and the replacement.
+Same shape as the regular-plural gap already fixed in the noun lookup path,
+and the advice again tells the writer to whitelist a word the standard
+replaces. It adds almost nothing to sensitivity now that a resolved verb
+position convicts as an error, 612 against 613, so the value is the rule and
+the replacement.
 
 **Fix.** A clause on `form_of/3` mapping a regular inflection onto a
 not-approved verb base, beside the `noun_plural/2` clause at
@@ -176,8 +179,8 @@ host with exit 2 and a message.
 0.35 s to consult the engine and 8679 facts before a byte of input is read,
 then 0.32 s of engine for a 750-word document, against 0.03 s for the same
 engine under SWI. Acceptable for one agent turn. Three minutes for 500,000
-words of `docs/`. F6 took the throughput from 1650 to 2460 words a second; the
-startup is what is left.
+words of `docs/`. The block-level rewrite took the throughput from 1650 to
+2460 words a second; the startup is what is left.
 
 **Fix**, in increasing order of work. Accept many files in one invocation,
 which the host already does, so the startup cost amortises. Then a long-lived
@@ -197,62 +200,7 @@ points at. Minor.
 Its Rule 1.2 section lists the decidable subset as `ensure, verify, perform,
 should, shall, may, however, therefore, since, utilize`, but `verify` and
 `utilize` are not among the 39 `ste_recurring_error/3` facts the extraction
-produces, so they never reach `unconditional/2`. F3 made this moot in the
-output — both are errors now, through the resolved verb reading — but the
-document still describes a mechanism that does not hold. Settle against the
-printed page whether the extraction drops rows.
-
----
-
-# Rejected
-
-## R1. Rule 5.4 does not forbid a trailing condition
-
-Ranked third to implement once, on the strength of the one category that gets
-worse when the `simple-english` skill is loaded: trailing conditions, 16 to 24
-by that project's own counter. The ranking and the evidence were both wrong.
-
-Rule 5.4 asks that a condition *the reader must know about first* opens the
-instruction and is divided from the command with a comma. That is a judgement
-about which conditions must be known before acting, not a test on the position
-of `if`. The compliant half of the corpus carries **49 examples with a
-non-initial `if` or `when`**, compliant by construction. Their shapes, since
-the sentences themselves stay out of this repository:
-
-- an instruction whose object is qualified by a trailing `if` clause, where
-  the condition selects among things rather than gating the act;
-- an instruction to test *whether* something holds, where `if` introduces a
-  complement and is not a condition at all;
-- a safety instruction that opens with an imperative and attaches a `when`
-  clause. **34 of the 49 are this one idiom**, which the standard uses
-  throughout its own safety examples.
-
-Reproduce the count by scanning the compliant corpus for a non-initial `if` or
-`when`, as `test/measure.pl` scans it for everything else.
-
-A position test would convict the standard's own STE, including its canonical
-safety idiom. The order half of rule 5.4 belongs with rule 1.3: out of scope,
-because it needs a person to read for sense.
-
-The same evidence disqualifies the measurement that motivated it. That
-project's `trailing_condition` regex flags all three instructions above, so its
-count is not evidence about rule 5.4.
-
----
-
-# Fixed
-
-The reasoning lives in the code that carries it and in the Measured section of
-`README.md`. Kept here as one line each, because the measured effect of a
-change is the part that does not survive in a diff.
-
-| | What it was | Effect, measured |
-| --- | --- | --- |
-| **F1** | `take_block/4` ended a block when the *guessed* kind of the next line differed, and a continuation line is guessed `descriptive` whatever it continues | A bulleted list read as a paragraph of seven sentences: an error on ordinary markdown, gone. A step wrapped at a column lost its second line and its word count: rule 5.1 fires again. Also fixed with it: `1.54` opening a line read as a step **and had three characters eaten by the marker measurer**, and a paragraph opening "Warnings" took the safety limit |
-| **F2** | Two parse gaps, both under Known limits in `ste/README.md`: no production for a coordinated subject, and the period of `No.` ending a sentence | The two false positives F3 would otherwise have produced. Parse coverage unchanged, 76.2% to 76.3% |
-| **F3** | The severity policy excused a word in a position the grammar had committed to a **verb**, where the rule 1.6 technical-noun escape cannot apply | Sensitivity **202 to 613 of 1891, 10.7% to 32.4%**, at **0** false positives, because F2 went first. It also found a real violation in this project's own `USAGE.md` |
-| **F4** | The suite held the false-positive count at zero and nothing held the true-positive count | `sensitivity_floor/1`, a floor and not an equality. Verified to fail when raised past the figure |
-| **F5** | `resolved_vocab/5` looked words up with `ste_form/3` while the unresolved path used `form_of/3`, which knows regular plurals | `portions` drew a rule 1.1 warning advising the glossary where `portion` drew the error with `PART (n)`. Some 200 nouns. Warning noise also fell 9%, 4450 to 4027 |
-| **F6** | The block structure was guessed line by line | Replaced by `ste/markdown.pl`, the block level of [GFM 0.29-gfm](https://github.github.com/gfm/). An indented code block and a tilde fence were not representable, so their content was checked as prose: 12 errors to 6 on a document holding one of each. Throughput 1650 to **2460 words a second** |
-| **F7** | The block level had no suite, and the corpus cannot be one: every example is one sentence on one line | `test/markdown_test.pl` over `test/blocks.md`, 21 cases. It found a defect in itself: `table` is a prefix operator in SWI, so `table-31` read as `table(-31)` |
-| **F8** | Two gaps, both in `tokenize.pl`: `[text](target)` reached `toks/4` as bare characters, and a period ended a sentence with no regard for whether a space followed it | The three `README.md` false positives this repository's own `## Build` link produced, gone (a fourth, on the *heading* `## Build` itself, is issue 1's table-row defect read onto a heading, untouched by this). The second gap was not link-specific: `README.md:106`, "BUILD.md and USAGE.md are written in...", carries no markdown link at all and convicted itself the same way; `test/tokenize_test.pl`, 12 cases, holds both down independently of the lexicon |
+produces, so they never reach `unconditional/2`. The resolved-verb-position
+fix made this moot in the output — both are errors now, through that reading
+— but the document still describes a mechanism that does not hold. Settle
+against the printed page whether the extraction drops rows.
