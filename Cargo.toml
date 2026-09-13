@@ -21,6 +21,10 @@ path = "src/main.rs"
 # binary is meant to avoid. The engine parses text and needs none of it.
 scryer-prolog = { version = "0.10", default-features = false }
 clap = { version = "4", features = ["derive"] }
+# Already in the tree as one of scryer-prolog's own dependencies (see
+# Cargo.lock), so --recursive's directory walk costs nothing new to the
+# licence closure the README's Licence section counts.
+walkdir = "2"
 
 [profile.release]
 # Thin LTO, not fat: fat LTO with codegen-units = 1 took over four minutes for

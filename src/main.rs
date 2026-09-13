@@ -19,6 +19,7 @@ use diag::Severity;
 use engine::{Engine, Syntax};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use walkdir::{DirEntry, WalkDir};
 
 #[derive(Parser)]
 #[command(
@@ -34,6 +35,15 @@ struct Cli {
     /// other filter.
     #[arg(value_name = "FILE")]
     files: Vec<PathBuf>,
+
+    /// Walk a directory named on the command line, instead of erroring on it
+    ///
+    /// Only files named *.md or *.markdown are checked, in sorted order.
+    /// Everything else under a repository -- source, lockfiles, a .git --
+    /// is not documentation, so a hidden entry (dot-prefixed, .git included)
+    /// is skipped, the way rg and fd skip one by default.
+    #[arg(short, long)]
+    recursive: bool,
 
     /// Check this text instead, like python -c
     ///
@@ -230,13 +240,66 @@ fn gather(cli: &Cli) -> Result<Vec<Input>, String> {
                 label: "<stdin>".into(),
                 text: read_stdin()?,
             });
-        } else if let Err(e) = read_lines(f) {
-            return Err(format!("{}: {e}", f.display()));
-        } else {
-            inputs.push(Input::File(f.clone()));
+            continue;
         }
+        if f.is_dir() {
+            if !cli.recursive {
+                return Err(format!(
+                    "{}: is a directory; pass --recursive to check the files under it",
+                    f.display()
+                ));
+            }
+            for p in walk_markdown(f)? {
+                if let Err(e) = read_lines(&p) {
+                    return Err(format!("{}: {e}", p.display()));
+                }
+                inputs.push(Input::File(p));
+            }
+            continue;
+        }
+        if let Err(e) = read_lines(f) {
+            return Err(format!("{}: {e}", f.display()));
+        }
+        inputs.push(Input::File(f.clone()));
     }
     Ok(inputs)
+}
+
+/// Every `*.md`/`*.markdown` file under `dir`, sorted for output that does
+/// not depend on the order the filesystem happens to hand entries back in.
+///
+/// `walkdir` does not follow symlinks unless told to, so a link cycle under
+/// `dir` cannot turn this into an infinite walk.
+fn walk_markdown(dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut found = Vec::new();
+    let walker = WalkDir::new(dir)
+        .into_iter()
+        .filter_entry(|e| e.depth() == 0 || !hidden(e));
+    for entry in walker {
+        let entry = entry.map_err(|e| format!("{dir}: {e}", dir = dir.display()))?;
+        if entry.file_type().is_file() && is_markdown(entry.path()) {
+            found.push(entry.into_path());
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
+/// A dot-prefixed entry: `.git`, `.github`, an editor's `.foo` directory.
+/// None of it is documentation, so `walk_markdown` never descends into it.
+fn hidden(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .is_some_and(|s| s.starts_with('.'))
+}
+
+/// The extension check `path_syntax/2` uses for the markdown grammar, made
+/// here so recursion never sweeps up source files and lockfiles as prose.
+fn is_markdown(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"))
 }
 
 fn read_stdin() -> Result<String, String> {
@@ -267,4 +330,93 @@ fn read_glossary(path: &Path) -> std::io::Result<Vec<String>> {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .map(str::to_owned)
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_markdown, walk_markdown};
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// A fresh, empty directory under the OS temp dir, removed by the caller.
+    /// Parallel `cargo test` threads each get their own: a shared fixture on
+    /// disk would make one test's cleanup another test's missing file.
+    fn tempdir(label: &str) -> PathBuf {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("unslop-test-{}-{label}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("must create temp dir");
+        dir
+    }
+
+    fn touch(path: &Path) {
+        std::fs::create_dir_all(path.parent().unwrap()).expect("must create parent");
+        std::fs::write(path, "").expect("must write file");
+    }
+
+    #[test]
+    fn is_markdown_matches_the_extension_case_insensitively() {
+        assert!(is_markdown(Path::new("a.md")));
+        assert!(is_markdown(Path::new("a.MD")));
+        assert!(is_markdown(Path::new("a.markdown")));
+        assert!(is_markdown(Path::new("a.MARKDOWN")));
+        assert!(!is_markdown(Path::new("a.txt")));
+        assert!(!is_markdown(Path::new("a.md.bak")));
+        assert!(!is_markdown(Path::new("README")));
+    }
+
+    #[test]
+    fn walk_markdown_finds_files_under_subdirectories_in_sorted_order() {
+        let dir = tempdir("nested");
+        touch(&dir.join("z.md"));
+        touch(&dir.join("sub/a.md"));
+        touch(&dir.join("sub/deeper/b.MARKDOWN"));
+        touch(&dir.join("sub/skip.txt"));
+
+        let found = walk_markdown(&dir).expect("must walk");
+
+        assert_eq!(
+            found,
+            vec![
+                dir.join("sub/a.md"),
+                dir.join("sub/deeper/b.MARKDOWN"),
+                dir.join("z.md"),
+            ]
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn walk_markdown_skips_hidden_files_and_directories() {
+        let dir = tempdir("hidden");
+        touch(&dir.join("visible.md"));
+        // A hidden directory -- .git is the case this matters for, since it
+        // holds binary content that is not even valid UTF-8 text.
+        touch(&dir.join(".git/config.md"));
+        // A hidden file directly, not just a hidden directory.
+        touch(&dir.join(".env.md"));
+
+        let found = walk_markdown(&dir).expect("must walk");
+
+        assert_eq!(found, vec![dir.join("visible.md")]);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The root itself is never filtered as "hidden", even when its own name
+    /// is dot-prefixed: only entries found while descending are skipped.
+    #[test]
+    fn walk_markdown_does_not_reject_a_dot_prefixed_root() {
+        let parent = tempdir("dotroot-parent");
+        let dir = parent.join(".config");
+        touch(&dir.join("notes.md"));
+
+        let found = walk_markdown(&dir).expect("must walk");
+
+        assert_eq!(found, vec![dir.join("notes.md")]);
+
+        std::fs::remove_dir_all(&parent).ok();
+    }
 }

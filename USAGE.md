@@ -25,6 +25,18 @@ The first line gives the position and the rule. The second line gives the
 correction from the standard. The words after `use` are the words of ASD, not
 ours.
 
+## Examine a directory
+
+`unslop` gives an error when a file in your list is a directory. Add
+`--recursive` to read the files under it instead:
+
+```
+unslop --recursive docs
+```
+
+`unslop` reads each `.md` and `.markdown` file under the directory. It does
+not read a file of another type, and it does not read `.git`.
+
 ## Examine text from a pipe
 
 If you give no file name, `unslop` reads standard input:
@@ -92,6 +104,7 @@ that same file, thus the two manuals keep one word for each concept.
 
 | Option | The result |
 | --- | --- |
+| `--recursive` | Reads the files under a directory |
 | `--glossary FILE` | Reads your technical nouns from FILE |
 | `--warnings` | Shows warnings and errors |
 | `--quiet` | Shows only the count at the end |
