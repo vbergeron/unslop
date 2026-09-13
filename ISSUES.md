@@ -37,33 +37,7 @@ sentence is meaningful.
 apply and nothing is convicted on a reading the row does not have. Consider
 the same for `heading`.
 
-## 2. An inline markdown link convicts its own syntax
-
-```
-$ unslop -c '[BUILD.md](BUILD.md) covers it: obtaining the standard.'
-2 error(s)          # rule 1.2, "BUILD" is used as a verb
-
-$ unslop -c 'See BUILD.md for the steps.'      0 errors
-$ unslop -c 'See `BUILD.md` for the steps.'    0 errors, 0 warnings
-```
-
-A bare filename is fine and a code span is fine. The link form is not: the
-brackets and parentheses fragment the line, the period of `.md` ends a
-sentence, and the fragments that remain give `BUILD` a verb reading. It fires
-three times on this repository's own `README.md`.
-
-`markdown.pl` owns the block level and none of the inline level, so link and
-emphasis syntax reaches the tokenizer as text. A code span is already a token
-of its own; nothing else is.
-
-**Fix.** Recognise `[text](target)` in the tokenizer, emitting the text as
-words and the target as one opaque token, the way a code span works. The byte
-offsets have to survive it, which is why this belongs in the tokenizer and not
-in `markdown.pl`. Then reconsider `markup_word/1`, which drops single-character
-words to cope with what emphasis leaves behind and is a symptom of the same
-gap.
-
-## 3. A unanimous wrong parse on a noun phrase with a relative clause
+## 2. A unanimous wrong parse on a noun phrase with a relative clause
 
 ```
 $ unslop -c 'A quoted note that continues lazily.'
@@ -82,7 +56,7 @@ phrase with a relative clause and no main verb is an ordinary caption.
 without a verb, which adds the competing parse that unanimity then declines to
 convict.
 
-## 4. An inflected forbidden verb gets the wrong rule and the wrong advice
+## 3. An inflected forbidden verb gets the wrong rule and the wrong advice
 
 628 of the 629 not-approved single-word verbs carry no inflected form in the
 dictionary. That is reasonable, since the standard has no cause to print the
@@ -111,7 +85,7 @@ not-approved verb base, beside the `noun_plural/2` clause at
 modifier, and including it reported `ROTATING` in the standard's own compliant
 example of a rotating tube — one new false positive, measured.
 
-## 5. The output does not identify the ruler it measured with
+## 4. The output does not identify the ruler it measured with
 
 ```
 $ unslop --version
@@ -131,7 +105,7 @@ cannot tell "the documents got worse" from "we rebuilt the lexicon".
 **Fix.** Hash `dictionary/ste_dictionary.pl` in `build.rs`, expose it through
 `--version`, and carry it in a header object in the JSON.
 
-## 6. JSON output does not say when the run was cut short
+## 5. JSON output does not say when the run was cut short
 
 ```
 $ unslop --format json --max-errors 2 doc.md | jq length
@@ -148,7 +122,7 @@ the shape in `USAGE.md` beside the exit status. While there: `--quiet --format
 json` prints the count line rather than JSON, which is defensible and
 undocumented.
 
-## 7. A length limit is cited to a rule that does not set it
+## 6. A length limit is cited to a rule that does not set it
 
 ```
 $ unslop safety.md
@@ -163,7 +137,7 @@ out of scope, so a safety block has no implemented rule to cite.
 `ste/README.md` says is within reach now that the block kind is parsed, or drop
 `limit(safety, 20)` and let a safety block take the limit rule 6.3 does set.
 
-## 8. Five approved verbs carry no inflected form, and one is in the corpus
+## 7. Five approved verbs carry no inflected form, and one is in the corpus
 
 `activate`, `deactivate`, `must`, `will` and `cannot` list only the base form
 in `ste_form/3`. For the modals that is correct. For `activate` it means the
@@ -182,7 +156,7 @@ counts errors only.
 `scripts/extract_dictionary.py`. If they are not, the engine must derive the
 regular forms of an approved verb instead of requiring them listed.
 
-## 9. A control character in a path panics the process
+## 8. A control character in a path panics the process
 
 ```
 $ unslop "$(printf 'we\nird.md')"
@@ -197,7 +171,7 @@ contract is 0, 1 or 2.
 **Fix.** Escape control characters in `quote/1`, or reject such a path in the
 host with exit 2 and a message.
 
-## 10. Startup is paid on every invocation
+## 9. Startup is paid on every invocation
 
 0.35 s to consult the engine and 8679 facts before a byte of input is read,
 then 0.32 s of engine for a 750-word document, against 0.03 s for the same
@@ -210,7 +184,7 @@ which the host already does, so the startup cost amortises. Then a long-lived
 mode that reads paths on standard input. Then find where Scryer spends the
 engine time, because the algorithm is evidently not the cost.
 
-## 11. Each file is read twice
+## 10. Each file is read twice
 
 `Input::lines` at `src/main.rs:175` reads the file in Rust to convert a byte
 offset into a character column, and `check_file/2` reads it again in Prolog.
@@ -218,7 +192,7 @@ Deliberate as far as it goes, since the host holds the text and the engine
 holds the parse, but the second read is only wanted for the lines a diagnostic
 points at. Minor.
 
-## 12. `ste/README.md` names two words as unconditional that are not
+## 11. `ste/README.md` names two words as unconditional that are not
 
 Its Rule 1.2 section lists the decidable subset as `ensure, verify, perform,
 should, shall, may, however, therefore, since, utilize`, but `verify` and
@@ -281,3 +255,4 @@ change is the part that does not survive in a diff.
 | **F5** | `resolved_vocab/5` looked words up with `ste_form/3` while the unresolved path used `form_of/3`, which knows regular plurals | `portions` drew a rule 1.1 warning advising the glossary where `portion` drew the error with `PART (n)`. Some 200 nouns. Warning noise also fell 9%, 4450 to 4027 |
 | **F6** | The block structure was guessed line by line | Replaced by `ste/markdown.pl`, the block level of [GFM 0.29-gfm](https://github.github.com/gfm/). An indented code block and a tilde fence were not representable, so their content was checked as prose: 12 errors to 6 on a document holding one of each. Throughput 1650 to **2460 words a second** |
 | **F7** | The block level had no suite, and the corpus cannot be one: every example is one sentence on one line | `test/markdown_test.pl` over `test/blocks.md`, 21 cases. It found a defect in itself: `table` is a prefix operator in SWI, so `table-31` read as `table(-31)` |
+| **F8** | Two gaps, both in `tokenize.pl`: `[text](target)` reached `toks/4` as bare characters, and a period ended a sentence with no regard for whether a space followed it | The three `README.md` false positives this repository's own `## Build` link produced, gone (a fourth, on the *heading* `## Build` itself, is issue 1's table-row defect read onto a heading, untouched by this). The second gap was not link-specific: `README.md:106`, "BUILD.md and USAGE.md are written in...", carries no markdown link at all and convicted itself the same way; `test/tokenize_test.pl`, 12 cases, holds both down independently of the lexicon |

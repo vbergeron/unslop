@@ -269,10 +269,11 @@ verbatim examples from a copyrighted document.
   the check because it opens with a `#`. `check/3` overrides this, and the host
   exposes that as `--syntax`.
 - `markdown.pl` implements the block level of the spec and none of the inline
-  level. Emphasis and link syntax reach the tokenizer as text, and an inline
-  link still convicts its own syntax; see `../ISSUES.md`. The seven HTML block
-  conditions are not each implemented, and tight and loose lists are not
-  distinguished, which changes the rendering and not the text.
+  level. Emphasis still reaches the tokenizer as text -- `markup_word/1` in
+  `rules.pl` is the symptom -- though `[text](target)` no longer does; see
+  `../ISSUES.md`, Fixed, F8. The seven HTML block conditions are not each
+  implemented, and tight and loose lists are not distinguished, which changes
+  the rendering and not the text.
 - Predicates live in one flat namespace, so a name can collide across files as
   `run/4` already did once, and `main/0` a second time. Keeping it ISO means no
   modules; prefixing is the fix if it happens again.

@@ -9,7 +9,7 @@
 %      rule 8.7 (a hyphenated word counts as one word) falls out for free
 %   n  a number, decimal point included
 %   c  an inline code span, `like this`
-%   u  a URL
+%   u  a URL, or the target of a markdown link, `[text](target)`
 %   q  a quoted run, "like this", one token by rule 8.6
 %   p  a punctuation character, Value is the character as an atom
 %
@@ -144,6 +144,8 @@ toks([C|Cs], L, Byte, Tokens) :-
     ->  delimited(c, C, Cs, L, Byte, Tokens)
     ;   dquote(C)
     ->  delimited(q, C, Cs, L, Byte, Tokens)
+    ;   C =:= 0'[, link_shape(Cs, Text, Target, Rest)
+    ->  link_tokens(Text, Target, Rest, L, Byte, Tokens)
     ;   url_start([C|Cs])
     ->  upto_space([C|Cs], Content, Rest),
         emit(u, Content, Rest, L, Byte, Tokens)
@@ -175,6 +177,74 @@ emit(Kind, Content, Rest, L, Byte, [t(Kind, V, pos(L, Byte, Len))|More]) :-
     codes_bytes(Content, Len),
     Byte1 is Byte + Len,
     toks(Rest, L, Byte1, More).
+
+% ---- markdown inline links -----------------------------------------------
+%
+% `[text](target)`. markdown.pl owns the block level and none of the inline
+% level (see its header comment), so a link reaches here as plain characters:
+% without this, the brackets and parentheses come out as ordinary punctuation
+% and the target's own punctuation -- most often the period of a file
+% extension, as in "[BUILD.md](BUILD.md)" -- reads as the end of a sentence.
+% The fragment that survives can force an ordinary word into the only verb
+% reading left, which is how a correct link convicts itself; see ISSUES.md,
+% Fixed, F8.
+%
+% The fix mirrors a code span: the link text is re-tokenized in place, since
+% it is prose a reader sees and rule 1.2 and the rest must keep checking it,
+% but the target becomes one opaque token -- kind `u`, the same as a bare URL
+% -- so a relative path's slashes and hyphens, or a URL's own words, are never
+% read as English, and its bytes cannot split the sentence around the link.
+%
+% Cs is everything after the opening '['. Anything this does not recognise --
+% an unterminated link, a reference-style link, a stray '[' in prose, text
+% holding a nested '[' -- fails, and toks/4 falls back to treating '[' as one
+% character of punctuation, exactly as before this existed.
+link_shape(Cs, Text, Target, Rest) :-
+    bracket_text(Cs, Text, After0),
+    After0 = [0'(|After1],
+    paren_target(After1, 1, Target, Rest).
+
+% The text runs to the first ']' on the line. A '[' inside it is not handled:
+% nested link text is rare, and this is simply one more shape that falls back.
+bracket_text([0']|Cs], [], Cs) :- !.
+bracket_text([C|Cs], [C|Text], Rest) :-
+    C =\= 0'[,
+    bracket_text(Cs, Text, Rest).
+
+% The target, up to the ')' that closes the '(' already consumed. Depth-
+% counted so a target may hold one balanced parenthetical of its own, as in a
+% Wikipedia-style URL; mirrors skip_parens/3 in tokenize.pl. An escaped
+% '\)' inside a target is not handled, the same class of gap as above.
+paren_target([0'(|Cs], D, [0'(|Target], Rest) :-
+    !, D1 is D + 1, paren_target(Cs, D1, Target, Rest).
+paren_target([0')|Cs], D, Target, Rest) :-
+    !,
+    (   D =:= 1
+    ->  Target = [], Rest = Cs
+    ;   D1 is D - 1, Target = [0')|Target1], paren_target(Cs, D1, Target1, Rest)
+    ).
+paren_target([C|Cs], D, [C|Target], Rest) :- paren_target(Cs, D, Target, Rest).
+
+% link_tokens(+Text, +Target, +Rest, +Line, +ByteOfOpenBracket, -Tokens)
+%
+% '[', ']', '(' and ')' get no tokens of their own: they carry no part of
+% speech, sentence_end/1 does not name them, and count_words/2 already counts
+% one opaque token as one word (rule 8.5's "text in parentheses is one word"
+% falls out the same way), so nothing downstream needs them. Byte tracking
+% stays exact regardless, which is what a diagnostic on either side of the
+% link relies on.
+link_tokens(Text, Target, Rest, L, Byte, Tokens) :-
+    codes_bytes(Text, TextLen),
+    TextByte is Byte + 1,                      % past '['
+    toks(Text, L, TextByte, TextTokens),
+    OpenParenByte is TextByte + TextLen + 1,    % past text and ']'
+    codes_bytes(Target, TargetLen),
+    TargetTokenLen is TargetLen + 2,            % '(' and ')' included
+    atom_codes(TargetAtom, Target),
+    TargetToken = t(u, TargetAtom, pos(L, OpenParenByte, TargetTokenLen)),
+    RestByte is OpenParenByte + TargetTokenLen, % past ')'
+    toks(Rest, L, RestByte, RestTokens),
+    append(TextTokens, [TargetToken|RestTokens], Tokens).
 
 % A span runs to the closing delimiter, or to end of line if there is none.
 span([], _, [], []).
@@ -247,7 +317,7 @@ sent_in([], Acc, Sentence) :-
     Acc = [_|_],
     reverse(Acc, Sentence).
 sent_in([T|Ts], Acc, Sentence) :-
-    (   sentence_end(T), \+ abbreviation_period(T, Ts)
+    (   sentence_end(T), \+ abbreviation_period(T, Ts), \+ glued_period(T, Ts)
     ->  reverse([T|Acc], S),
         (   Sentence = S
         ;   sent_in(Ts, [], Sentence)
@@ -266,6 +336,19 @@ sentence_end(t(p, ':', _)).
 % only parse made SERVICE the verb of an imperative -- so the sentence convicted
 % a technical noun that the rest of it would have resolved.
 abbreviation_period(t(p, '.', _), [t(n, _, _)|_]).
+
+% A period with no space before the next token is not a sentence boundary
+% either: real prose puts a space, or nothing, after a full stop, so a period
+% glued straight onto more text is a file extension, a version number or an
+% identifier, as in "BUILD.md" or "v1.2rc1" -- the other half of ISSUES.md,
+% Fixed, F8: a filename standing as a link's own visible text is still
+% tokenized as ordinary words, so its period needs this too. No token is ever
+% emitted for a space (see space/1 in toks/4), so two tokens with no byte gap
+% between them were never separated by one in the source; a gap of any size
+% means a space, or a tab, did stand there, and the period still ends the
+% sentence.
+glued_period(t(p, '.', pos(L, B, Len)), [t(_, _, pos(L, B2, _))|_]) :-
+    B2 =:= B + Len.
 
 % ---- word count, rules 8.4 thru 8.7 -------------------------------------
 
