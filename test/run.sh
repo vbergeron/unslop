@@ -5,12 +5,13 @@
 # a host loads is ste/load.pl and nothing else, so that is what is exercised.
 # The host's own tests are `cargo test`.
 #
-# Three Prolog suites:
+# Four Prolog suites:
 # Then scripts/check_no_standard.py, which holds ASD's own text out of the
 # files git would carry. .gitignore covers what the scripts generate; it cannot
 # cover a sentence quoted by hand into a document.
 #
 #   markdown_test.pl  the block structure, against test/blocks.md
+#   tokenize_test.pl  toks/4 and sentence_in/2, independent of the lexicon
 #   contract.pl       the shape of the answers and the streaming contract
 #   engine_test.pl    what the engine finds, and what it must not
 
@@ -39,6 +40,7 @@ suite() {
 }
 
 suite 'block structure'    markdown_main test/markdown_test.pl
+suite 'tokenizer'          tokenize_main test/tokenize_test.pl
 suite 'embedding contract' contract_main test/contract.pl
 suite 'engine findings'    engine_main   test/engine_test.pl
 
