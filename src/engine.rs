@@ -305,8 +305,20 @@ fn codes(s: &str) -> String {
     out
 }
 
-/// A quoted Prolog atom. Paths and glossary words are short, so this is the
-/// only escaping the boundary needs.
+/// A quoted Prolog atom.
+///
+/// Paths and glossary words are short, so escaping `'` and `\` was long
+/// taken to be the only case this boundary needed. It undercounted the
+/// input space: a raw control character -- a newline in a path is what
+/// surfaced this, `printf 'we\nird.md'` -- is not a character Scryer's
+/// reader accepts literally inside a quoted atom, and unlike a program
+/// throwing, a query that fails to *parse* is not a `Result` the host can
+/// catch: `Machine::run_query` reads the query with
+/// `.expect("Failed to parse query")`, so one unescaped control character
+/// here panics the whole process instead of surfacing as a diagnostic or an
+/// exit 2. Escaping every control character, the way `render::escape`
+/// already does for JSON, keeps every string this function is asked to
+/// quote parseable.
 fn quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('\'');
@@ -314,6 +326,17 @@ fn quote(s: &str) -> String {
         match c {
             '\'' => out.push_str("''"),
             '\\' => out.push_str("\\\\"),
+            '\x07' => out.push_str("\\a"),
+            '\x08' => out.push_str("\\b"),
+            '\t' => out.push_str("\\t"),
+            '\n' => out.push_str("\\n"),
+            '\x0b' => out.push_str("\\v"),
+            '\x0c' => out.push_str("\\f"),
+            '\r' => out.push_str("\\r"),
+            // Any other control character: Scryer's reader also accepts a
+            // terminated hex escape, `\xHH\`, for one a named escape above
+            // does not cover (an ESC byte, say, or a C1 control).
+            c if c.is_control() => out.push_str(&format!("\\x{:x}\\", c as u32)),
             _ => out.push(c),
         }
     }
@@ -398,5 +421,48 @@ mod tests {
         assert_eq!(quote("plain.md"), "'plain.md'");
         assert_eq!(quote("it's.md"), "'it''s.md'");
         assert_eq!(quote("a\\b.md"), "'a\\\\b.md'");
+    }
+
+    /// The bug in issue #11: a raw control character used to reach Scryer's
+    /// reader unescaped and panic the process. A named escape where Scryer
+    /// has one, a terminated hex escape otherwise.
+    #[test]
+    fn quotes_control_characters() {
+        assert_eq!(quote("we\nird.md"), "'we\\nird.md'");
+        assert_eq!(quote("a\tb"), "'a\\tb'");
+        assert_eq!(quote("a\x1bb"), "'a\\x1b\\b'");
+    }
+
+    /// The end-to-end regression: a path with an embedded newline, the exact
+    /// repro from issue #11 (`printf 'we\nird.md'`), must not take the
+    /// process down. Before the fix, this panicked inside Scryer's reader by
+    /// way of `Machine::run_query`'s `.expect("Failed to parse query")`,
+    /// which no `Result` in `Engine::run` could have caught anyway -- the
+    /// only place to stop it is `quote/1`, before the query is built.
+    #[test]
+    fn check_file_survives_a_control_character_in_the_path() {
+        let dir = std::env::temp_dir().join(format!(
+            "unslop-engine-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("must read clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("must create temp dir");
+        let path = dir.join("we\nird.md");
+        std::fs::write(&path, "Please note the value.\n").expect("must write file");
+
+        let sources = engine_sources(FIXTURE_DICTIONARY);
+        let mut engine = Engine::from_sources(&sources, &[]).expect("must load");
+        let result = engine.check_file(&path, None, Syntax::Text);
+
+        std::fs::remove_dir_all(&dir).ok();
+
+        let (found, _) = result.expect("must check the file, not panic on its name");
+        assert!(
+            found.iter().any(|d| d.rule == "1.2"),
+            "expected the file to actually be read and checked, got {found:?}"
+        );
     }
 }
