@@ -2,7 +2,7 @@
 % sentence_in/2 depend on neither, so every case here holds regardless of
 % which lexicon is loaded, unlike engine_test.pl's false-positive guard.
 %
-% ISSUES.md #2: an inline markdown link convicted its own syntax. Two defects
+% An inline markdown link used to convict its own syntax. Two defects
 % combined to do it, and both get a suite here:
 %
 %   * `[text](target)` reached the tokenizer as bare characters, so the
@@ -51,8 +51,8 @@ tokenize_main :-
       spaced_period_still_splits),
     t('"No. 105" still does not split, unaffected by the glued case',
       abbreviation_before_number_unaffected),
-    t('the exact ISSUES.md report is one sentence, not three',
-      issues_md_repro_is_one_sentence),
+    t('the exact bug report is one sentence, not three',
+      link_repro_is_one_sentence),
     finish.
 
 % ---- the link itself ------------------------------------------------------
@@ -119,7 +119,7 @@ abbreviation_before_number_unaffected :-
 % The whole reported input is one sentence up to the colon (rule 8.4), not
 % three fragments split at "BUILD.", "md]", and "BUILD." again -- which is
 % what let an ordinary word stand alone and be read as the sentence's verb.
-issues_md_repro_is_one_sentence :-
+link_repro_is_one_sentence :-
     sentences_of(
         '[BUILD.md](BUILD.md) covers it: obtaining the standard.',
         Sentences),
