@@ -1,9 +1,13 @@
 # unslop
 
-Checks documentation against ASD-STE100 Simplified Technical English. Reports
-each rule the text breaks, at a line and column, with the replacement the
-standard gives. It runs offline, against a lexicon extracted from the
-standard.
+[![CI](https://github.com/vbergeron/unslop/actions/workflows/ci.yml/badge.svg)](https://github.com/vbergeron/unslop/actions/workflows/ci.yml)
+[![Licence: MIT OR Apache-2.0](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue.svg)](#licence)
+
+A mechanical ASD-STE100 gate for documentation. Checks prose against
+Simplified Technical English and reports each rule the text breaks, at a line
+and column, with the replacement the standard gives. It runs offline, against
+a lexicon extracted from the standard: no network call, no second model
+grading the first.
 
 ```
 $ unslop docs/guide.md
@@ -13,6 +17,31 @@ docs/guide.md:8:4: error rule 1.2: "Check" is used as a verb, which is not appro
     -> use MAKE SURE (v), MEASURE (v), EXAMINE (v), CHECK (n)
 6 error(s), 26 warning(s)
 ```
+
+## Quick start
+
+There is no `cargo install unslop`. The binary embeds a lexicon extracted
+from a copyrighted standard, so you build it yourself once you hold a copy —
+three commands, once you have the PDF:
+
+```
+# get the standard free of charge, save it as ASD-STE100_ISSUE9.pdf in the
+# repository root: https://www.asd-ste100.org/STE_downloads.html
+python3 scripts/extract_dictionary.py
+cargo build --release --locked
+```
+
+[BUILD.md](BUILD.md) walks through each step and what to do if one fails.
+The *Licensing* section right below explains why this can't be a one-liner.
+Once you have a binary, [USAGE.md](USAGE.md) or *Usage* below covers running
+it.
+
+## Contents
+
+[Licensing](#licensing) · [Build](#build) · [Usage](#usage) ·
+[Design](#design) · [Coverage](#coverage) · [Measured](#measured) ·
+[In an agent loop](#in-an-agent-loop) · [Layout](#layout) ·
+[Copyright](#copyright) · [Licence](#licence)
 
 ## Licensing
 
@@ -350,7 +379,9 @@ that writes fast fails where a writer in a hurry does.
 | `examples/loadcheck.rs` | Reports what Scryer rejects while loading |
 
 Open defects are tracked as [GitHub Issues](https://github.com/vbergeron/unslop/issues),
-not in this tree.
+not in this tree. Issues and pull requests are welcome. A change to `ste/` or
+`src/` needs `test/run.sh` to pass, which needs your own copy of the
+standard, per Licensing above.
 
 ## Copyright
 
